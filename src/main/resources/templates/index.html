@@ -2,87 +2,85 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <title>SQS Manager</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <script>
-        function setQueueURL(queueUrl) {
-            document.getElementById('modalQueueUrl').value = queueUrl;
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    <style>
+        .table-bordered,
+        .table-bordered thead th,
+        .table-bordered th,
+        .table-bordered tbody td,
+        .table-bordered td,
+        .table-bordered tfoot th,
+        .table-bordered tfoot td {
+            border-color: #a2a0a5 !important; /* Bright blue color */
         }
 
-        function addAttributeRow() {
-            var attributesContainer = document.getElementById('attributesContainer');
-            var newRow = document.querySelector('.attribute-row').cloneNode(true);
-            attributesContainer.appendChild(newRow);
+        .table-bordered thead th {
+            border-color: #a2a0a5 !important; /* Black for the header */
         }
 
-        function removeAttributeRow(button) {
-            var row = button.parentElement.parentElement;
-            if (document.querySelectorAll('.attribute-row').length > 1) { // Ensure there's always at least one row
-                row.remove();
-            } else {
-                // Clear the values if it's the last row
-                row.querySelector('input[name="attributeName[]"]').value = '';
-                row.querySelector('input[name="attributeValue[]"]').value = '';
-                row.querySelector('select[name="attributeDataType[]"]').value = 'String';
-            }
-        }
-        function prepareReceiveMessage(queueUrl) {
-            fetch(`/receive-message?queueUrl=${encodeURIComponent(queueUrl)}`)
-                .then(response => response.json())
-                .then(data => {
-                    let messageContent = '';
-                    data.forEach(message => {
-                        messageContent += `<p>${message.body}</p>`;
-                    });
-                    document.getElementById('receivedMessagesBody').innerHTML = messageContent;
-                });
-        }
-    </script>
+    </style>
+    <script th:src="@{/js/sqs.js}" defer></script>
 
 </head>
-<body class="container mt-5">
 
-<h2>Create Queue</h2>
-<form action="/create-queue" method="post" class="mb-5">
-    <div class="form-group">
-        <input type="text" name="queueName" placeholder="Enter Queue Name" class="form-control" required>
-    </div>
-    <div class="form-check">
-        <input class="form-check-input" type="checkbox" name="isFifo" id="fifoCheck">
-        <label class="form-check-label" for="fifoCheck">
-            Create as FIFO Queue
-        </label>
-    </div>
-    <button type="submit" class="btn btn-primary mt-2">Create Queue</button>
-</form>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <a class="navbar-brand mx-auto" href="#">SQS Admin UI</a>
 
-
-<h2>Existing Queues</h2>
-<table class="table">
-    <thead>
-    <tr>
-        <th scope="col">Queue URL</th>
-        <th scope="col">Actions</th>
-    </tr>
-    </thead>
-    <tbody>
-    <tr th:each="queue : ${queues}">
-        <td th:text="${queue}"></td>
-        <td>
-            <!-- Send Message Button -->
-            <button type="button" class="btn btn-success btn-sm" data-toggle="modal" data-target="#sendMessageModal" th:data-queueurl="${queue}" onclick="setQueueURL(this.getAttribute('data-queueurl'))">Send Message</button>
-            <!-- Receive Message Button -->
-            <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#receiveMessageModal" th:data-queueurl="${queue}" onclick="prepareReceiveMessage(this.getAttribute('data-queueurl'))">Receive Message</button>
-            <!-- Delete Queue Form -->
-            <form action="/delete-queue" method="post" style="display:inline;">
-                <input type="hidden" name="queueUrl" th:value="${queue}">
-                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-            </form>
-        </td>
-    </tr>
-    </tbody>
-</table>
+</nav>
+<div class="container mt-5">
+    <div id="alertContainer"></div>
+    <h2>Create Queue</h2>
+    <form id="createQueueForm" class="mb-5">
+        <div class="row align-items-center">
+            <div class="col-md-5">
+                <input type="text" name="queueName" id="queueName" placeholder="Enter Queue Name" class="form-control"
+                       required>
+            </div>
+            <div class="col-md-4 form-check">
+                <input class="form-check-input" type="checkbox" name="isFifo" id="isFifo">
+                <label class="form-check-label" for="isFifo">Create as FIFO Queue</label>
+            </div>
+            <div class="col-md-3">
+                <button type="button" onclick="createQueue()" class="btn btn-primary">Create Queue</button>
+            </div>
+        </div>
+    </form>
 
 
+    <h2>Existing Queues</h2>
+    <table class="table table-bordered">
+        <thead>
+        <tr>
+            <th scope="col">Queue URL</th>
+            <th scope="col">Actions</th>
+        </tr>
+        </thead>
+        <tbody id="queueList"> <!-- Add an ID to tbody for easy reference -->
+        <!-- Template row - hidden and used to clone for each queue -->
+        <tr id="queueRowTemplate" class="template-row" style="display:none;">
+            <td class="queueUrl"></td>
+            <td>
+                <!-- Send Message Button -->
+                <button type="button" class="btn btn-success btn-sm" data-toggle="modal" data-target="#sendMessageModal"
+                        data-queueurl="" onclick="setQueueURL(this.getAttribute('data-queueurl'))">Send Message
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" data-queueurl=""
+                        onclick="openMessagePolling(this.getAttribute('data-queueurl'))">Polling Message
+                </button>
+                <button type="button" class="btn btn-danger btn-sm" data-queueurl=""
+                        onclick="deleteQueue(this.getAttribute('data-queueurl'),this)">Delete</button>
+
+            </td>
+        </tr>
+        </tbody>
+    </table>
+</div>
 <!-- The Modal -->
 <div class="modal" id="sendMessageModal">
     <div class="modal-dialog modal-lg">
@@ -98,7 +96,8 @@
             <div class="modal-body">
                 <form action="/send-message" method="post">
                     <div class="form-group">
-                        <input type="text" name="queueUrl" id="modalQueueUrl" placeholder="Enter Queue URL" class="form-control" required>
+                        <input type="text" name="queueUrl" id="modalQueueUrl" placeholder="Enter Queue URL"
+                               class="form-control" required>
                     </div>
 
                     <div class="form-group">
@@ -109,10 +108,12 @@
                         <!-- A single row for attributes. Users can add more using the "Add Attribute" button -->
                         <div class="form-group form-row attribute-row">
                             <div class="col">
-                                <input type="text" name="attributeName[]" placeholder="Message Attribute Name" class="form-control">
+                                <input type="text" name="attributeName[]" placeholder="Message Attribute Name"
+                                       class="form-control">
                             </div>
                             <div class="col">
-                                <input type="text" name="attributeValue[]" placeholder="Message Attribute Value" class="form-control">
+                                <input type="text" name="attributeValue[]" placeholder="Message Attribute Value"
+                                       class="form-control">
                             </div>
                             <div class="col">
                                 <select name="attributeDataType[]" class="form-control">
@@ -122,11 +123,15 @@
                                 </select>
                             </div>
                             <div class="col-1">
-                                <button type="button" class="btn btn-danger remove-attribute-btn" onclick="removeAttributeRow(this)">X</button>
+                                <button type="button" class="btn btn-danger remove-attribute-btn"
+                                        onclick="removeAttributeRow(this)">X
+                                </button>
                             </div>
                         </div>
                     </div>
-                    <button type="button" class="btn btn-secondary mt-2 mb-3" onclick="addAttributeRow()">Add Attribute</button>
+                    <button type="button" class="btn btn-secondary mt-2 mb-3" onclick="addAttributeRow()">Add
+                        Attribute
+                    </button>
 
                     <div class="form-group">
                         <input type="text" name="deduplicationId" placeholder="Deduplication ID" class="form-control">
@@ -148,28 +153,11 @@
     </div>
 </div>
 
-<!-- Receive Message Modal -->
-<div class="modal fade" id="receiveMessageModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Received Messages</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
-            <div class="modal-body" id="receivedMessagesBody">
-                <!-- Messages will be inserted here using JavaScript -->
-            </div>
-        </div>
-    </div>
-</div>
-
-
 
 <!-- Optional: Add Bootstrap's JavaScript and jQuery (for dropdowns, modals, etc.) -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
 
 </body>
 </html>
