@@ -4,7 +4,7 @@ import com.akilamaxi.sqsadminui.dto.MessageDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.services.sqs.SqsAsyncClient;
+import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
 import software.amazon.awssdk.services.sqs.model.DeleteQueueRequest;
@@ -20,7 +20,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
@@ -31,8 +30,10 @@ import static software.amazon.awssdk.services.sqs.model.QueueAttributeName.FIFO_
 @Service
 public class SqsService {
 
+    public static final String SENT_TIMESTAMP = "SentTimestamp";
+    public static final String APPROXIMATE_FIRST_RECEIVE_TIMESTAMP = "ApproximateFirstReceiveTimestamp";
     @Autowired
-    private SqsAsyncClient sqsClient;
+    private SqsClient sqsClient;
 
     public String createQueue(String queueName, boolean isFifo) throws ExecutionException, InterruptedException {
         CreateQueueRequest.Builder requestBuilder = CreateQueueRequest.builder();
@@ -45,7 +46,7 @@ public class SqsService {
             queueName += ".fifo";
         }
 
-        return sqsClient.createQueue(requestBuilder.queueName(queueName).build()).get().queueUrl();
+        return sqsClient.createQueue(requestBuilder.queueName(queueName).build()).queueUrl();
     }
 
     public void sendMessage(String queueUrl, String message, Map<String, MessageAttributeValue> messageAttributes,
@@ -61,8 +62,9 @@ public class SqsService {
     }
 
     public List<String> listQueues() throws ExecutionException, InterruptedException {
-        final CompletableFuture<ListQueuesResponse> listQueues = sqsClient.listQueues();
-        return listQueues.get().queueUrls();
+//        final CompletableFuture<ListQueuesResponse> listQueues = sqsClient.listQueues();
+        final ListQueuesResponse listQueuesResponse = sqsClient.listQueues();
+        return listQueuesResponse.queueUrls();
     }
 
     public void deleteQueue(String queueUrl) {
@@ -76,8 +78,9 @@ public class SqsService {
                 .messageAttributeNames(Collections.singletonList("All")) // Fetch all message attributes
                 .build();
 
-        CompletableFuture<ReceiveMessageResponse> response = sqsClient.receiveMessage(receiveMessageRequest);
-        List<Message> messages = response.get().messages();
+//        CompletableFuture<ReceiveMessageResponse> response = sqsClient.receiveMessage(receiveMessageRequest);
+        final ReceiveMessageResponse receiveMessageResponse = sqsClient.receiveMessage(receiveMessageRequest);
+        List<Message> messages = receiveMessageResponse.messages();
 
         List<MessageDTO> messageDTOs = messages.stream().map(message -> {
             MessageDTO dto = new MessageDTO();
@@ -88,8 +91,8 @@ public class SqsService {
 
             // For SentDate and ReceivedDate, you might need additional processing
             // Here, I'm assuming these are custom attributes. If not, adjust accordingly.
-            dto.setSentDate(message.attributes().get("SentTimestamp"));
-            dto.setReceivedDate(message.attributes().get("ApproximateFirstReceiveTimestamp"));
+            dto.setSentDate(message.attributes().get(SENT_TIMESTAMP));
+            dto.setReceivedDate(message.attributes().get(APPROXIMATE_FIRST_RECEIVE_TIMESTAMP));
 
             return dto;
         }).collect(Collectors.toList());
@@ -98,7 +101,7 @@ public class SqsService {
         messages.forEach(message -> {
             log.info(message.body());
             // Delete the message after processing.
-            //deleteMessage(queueUrl, message.receiptHandle());
+            deleteMessage(queueUrl, message.receiptHandle());
         });
 
         return messageDTOs;

@@ -11,7 +11,7 @@ COPY ./target/SQS-AdminUI.jar /app/SQS-AdminUI.jar
 ENV AWS_ACCESS_KEY_ID=1234
 ENV AWS_SECRET_KEY=1234
 ENV AWS_REGION=ap-southeast-1
-ENV AWS_END_POINT=http://localhost:4566
+ENV SQS_ENDPOINT_URL=http://localhost:4566
 
 # Specify the default command to run the JAR
 CMD ["java", "-jar", "/app/SQS-AdminUI.jar"]

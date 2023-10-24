@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.sqs.SqsAsyncClient;
+import software.amazon.awssdk.services.sqs.SqsClient;
 
 import java.net.URI;
 
@@ -25,7 +25,7 @@ public class AwsConfig {
     @Value("${aws.end-point}")
     private String endPoint;
 
-    @Bean
+/*    @Bean
     public SqsAsyncClient sqsAsyncClient() {
         return SqsAsyncClient.builder()
                 .endpointOverride(
@@ -40,7 +40,41 @@ public class AwsConfig {
                 )
                 .region(Region.of(region))
                 .build();
+    }*/
+
+    @Bean
+    public SqsClient sqsClient() {
+
+        return SqsClient.builder()
+                .endpointOverride(
+                        URI.create(endPoint)
+                )
+                .credentialsProvider(
+                        StaticCredentialsProvider.create(
+                                AwsBasicCredentials.create(
+                                        accessKey, secretKey
+                                )
+                        )
+                )
+                .region(Region.of(region))
+                .build();
     }
+
+/*
+    @Bean
+    SqsMessageListenerContainerFactory<Object> defaultSqsListenerContainerFactory(SqsAsyncClient sqsAsyncClient) {
+        return SqsMessageListenerContainerFactory
+                .builder()
+                .configure(options -> options
+                        .acknowledgementMode(AcknowledgementMode.ON_SUCCESS)
+                        .acknowledgementInterval(Duration.ofSeconds(3))
+                        .acknowledgementThreshold(5)
+                        .acknowledgementOrdering(AcknowledgementOrdering.ORDERED)
+                )
+                .sqsAsyncClient(sqsAsyncClient)
+                .build();
+    }
+*/
 
 
 }
